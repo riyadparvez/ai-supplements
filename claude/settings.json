@@ -1,0 +1,94 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "LS",
+      "Edit",
+      "MultiEdit",
+      "WebFetch(domain:gunicorn.org)",
+      "WebSearch",
+      "mcp__serena__find_symbol",
+      "mcp__serena__get_symbols_overview",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Read(//temp/readonly/**)",
+      "Read(//private/var/folders/**)",
+      "Bash(.venv/bin/pip show *)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(awk '-F ' '{print $NF}')",
+      "Bash(awk -F. '{print $\\(NF-1\\) \".\" $NF}')",
+      "Bash(sort -t'.' -k1 -nr)",
+      "Bash(awk '{print $\\(NF-2\\) \" \" $\\(NF-1\\) \" \" $NF}')",
+      "Bash(xargs ls *)",
+      "Bash(grep *)",
+      "Bash(python -c ' *)",
+      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git blame *)",
+      "Bash(git status *)",
+      "Bash(uv pip:*)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(find *)",
+      "Bash(echo *)",
+      "Read(//Users/riyad/.claude/plans/**)",
+      "Bash(python -m pytest tests/test_soil_sync.py -k \"test_sync_readings_batch\" -v)",
+      "Bash(pipenv lock *)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(grep -rn \"logger\\\\.error.*\\\\\\(e\\\\\\)$\" /Users/riyad/dev-src/pipeline --include=\"*.py\" --exclude-dir=\".venv\")"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(ssh:*)",
+      "Bash(curl * | sh)",
+      "Bash(chmod *)",
+      "Bash(chown *)",
+      "Bash(git push --force*)"
+    ],
+    "additionalDirectories": [
+      "/Users/riyad/dev-src/pipeline/pipeline/src/pipeline",
+      "/tmp",
+      "/Users/riyad/dev-src/pipeline/device_ingestion/src/device_ingestion",
+      "/Users/riyad/dev-src/pipeline/plugfield_client/src/plugfield_client"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bunx -y ccstatusline@latest",
+    "padding": 0
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write(*.py)",
+        "hooks": [{ "type": "command", "command": "uv run black $file" }]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "pg@aiguide": true,
+    "deploy-on-aws@claude-plugins-official": true,
+    "chrome-devtools-mcp@claude-plugins-official": true,
+    "gitlab@claude-plugins-official": true,
+    "terraform@claude-plugins-official": true,
+    "chrome-devtools-mcp@chrome-devtools-plugins": true,
+    "claude-hud@claude-hud": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    }
+  },
+  "effortLevel": "high",
+  "model": "haiku"
+}
