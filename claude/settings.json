@@ -1,13 +1,15 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Read",
       "Grep",
       "Glob",
-      "LS",
+      "LSP",
       "Edit",
       "MultiEdit",
       "WebFetch(domain:gunicorn.org)",
+      "WebFetch(domain:*.weather.gc.ca)",
       "WebSearch",
       "mcp__serena__find_symbol",
       "mcp__serena__get_symbols_overview",
@@ -16,41 +18,46 @@
       "Read(//temp/readonly/**)",
       "Read(//private/var/folders/**)",
       "Bash(.venv/bin/pip show *)",
-      "Bash(xargs -I {} basename {})",
       "Bash(awk '-F ' '{print $NF}')",
       "Bash(awk -F. '{print $\\(NF-1\\) \".\" $NF}')",
-      "Bash(sort -t'.' -k1 -nr)",
       "Bash(awk '{print $\\(NF-2\\) \" \" $\\(NF-1\\) \" \" $NF}')",
-      "Bash(xargs ls *)",
-      "Bash(grep *)",
-      "Bash(python -c ' *)",
-      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(cat *)",
+      "Bash(cd /Users/riyad/dev-src/*)",
+      "Bash(echo *)",
+      "Bash(find *)",
+      "Bash(git blame *)",
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)",
-      "Bash(git blame *)",
       "Bash(git status *)",
-      "Bash(uv pip:*)",
-      "Bash(cat *)",
+      "Bash(grep *)",
       "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(wc *)",
-      "Bash(find *)",
-      "Bash(echo *)",
-      "Read(//Users/riyad/.claude/plans/**)",
-      "Bash(python -m pytest tests/test_soil_sync.py -k \"test_sync_readings_batch\" -v)",
+      "Bash(ls *)",
       "Bash(pipenv lock *)",
-      "Bash(echo \"Exit code: $?\")",
-      "Bash(grep -rn \"logger\\\\.error.*\\\\\\(e\\\\\\)$\" /Users/riyad/dev-src/pipeline --include=\"*.py\" --exclude-dir=\".venv\")"
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/test_soil_sync.py -k \"test_sync_readings_batch\" -v)",
+      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(sed *)",
+      "Bash(sort -t'.' -k1 -nr)",
+      "Bash(tail *)",
+      "Bash(uv pip:*)",
+      "Bash(wc *)",
+      "Bash(which *)",
+      "Bash(xargs ls *)",
+      "Bash(xargs -I {} basename {})",
+      "Read(//Users/riyad/.claude/plans/**)",
+      "Read(//Users/riyad/dev-src/**)"
     ],
     "deny": [
-      "Bash(rm -rf *)",
-      "Bash(sudo *)",
-      "Bash(ssh:*)",
-      "Bash(curl * | sh)",
       "Bash(chmod *)",
       "Bash(chown *)",
-      "Bash(git push --force*)"
+      "Bash(curl * | sh)",
+      "Bash(git push --force*)",
+      "Bash(git push origin master)",
+      "Bash(rm -rf *)",
+      "Bash(ssh:*)",
+      "Bash(sudo *)",
+      "Bash(wget * | sh)"
     ],
     "additionalDirectories": [
       "/Users/riyad/dev-src/pipeline/pipeline/src/pipeline",
@@ -65,21 +72,42 @@
     "padding": 0
   },
   "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'"
+          },
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Glass.aiff"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
-        "matcher": "Write(*.py)",
-        "hooks": [{ "type": "command", "command": "uv run black $file" }]
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=$(jq -r '.tool_input.file_path'); [[ \"$file\" == *.py ]] && uv run black \"$file\""
+          }
+        ]
       }
     ]
   },
   "enabledPlugins": {
-    "pg@aiguide": true,
+    "pg@aiguide": false,
     "deploy-on-aws@claude-plugins-official": true,
-    "chrome-devtools-mcp@claude-plugins-official": true,
+    "chrome-devtools-mcp@claude-plugins-official": false,
     "gitlab@claude-plugins-official": true,
-    "terraform@claude-plugins-official": true,
-    "chrome-devtools-mcp@chrome-devtools-plugins": true,
-    "claude-hud@claude-hud": true
+    "terraform@claude-plugins-official": false,
+    "chrome-devtools-mcp@chrome-devtools-plugins": false,
+    "claude-hud@claude-hud": true,
+    "claude-mem@thedotmack": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -89,6 +117,15 @@
       }
     }
   },
-  "effortLevel": "high",
-  "model": "haiku"
+  "effortLevel": "medium",
+  "network": {
+    "allowedDomains": [
+      "*.weather.gc.ca"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+  },
+  "switchModelsOnFlag": false,
+  "model": "sonnet"
 }

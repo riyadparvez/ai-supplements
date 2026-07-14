@@ -1,0 +1,84 @@
+interface:
+  display_name: "Python Refactor Verifier"
+  short_description: "Prove a Python refactor only renames functions and adds imports"
+  long_description: |
+    Deterministically verify that a Python refactor adheres to a strict policy:
+    - Only function/method renames and corresponding call-site updates are permitted
+    - New imports can be added
+    - All other code changes are rejected (including comments, decorators, parameters, etc.)
+    Uses AST comparison and token analysis to catch subtle violations.
+
+capabilities:
+  - id: directory_verification
+    name: "Verify directories"
+    description: "Compare two Python source trees (before and after refactor)"
+    inputs:
+      - name: before_dir
+        type: string
+        description: "Path to original Python source tree"
+        required: true
+      - name: after_dir
+        type: string
+        description: "Path to refactored Python source tree"
+        required: true
+      - name: ignore_rules
+        type: array
+        description: "Violation rules to ignore (e.g., comments, imports)"
+        required: false
+      - name: json_output
+        type: boolean
+        description: "Output machine-readable JSON"
+        required: false
+        default: false
+
+  - id: git_verification
+    name: "Verify Git revisions"
+    description: "Compare two Git revisions (before and after refactor)"
+    inputs:
+      - name: base_ref
+        type: string
+        description: "Original Git revision (e.g., main, HEAD~1)"
+        required: true
+      - name: head_ref
+        type: string
+        description: "Refactored Git revision (e.g., HEAD)"
+        required: true
+      - name: repo_dir
+        type: string
+        description: "Path to Git repository (default: current directory)"
+        required: false
+      - name: ignore_rules
+        type: array
+        description: "Violation rules to ignore (e.g., comments, imports)"
+        required: false
+      - name: json_output
+        type: boolean
+        description: "Output machine-readable JSON"
+        required: false
+        default: false
+
+exit_codes:
+  0: "Verification passed (no violations)"
+  1: "Verification failed (policy violations detected)"
+  2: "Verification error (invalid input or Git failure)"
+
+examples:
+  - title: "Verify a refactor in current directory"
+    description: "Run verification on before/ and after/ directories"
+    command: "python scripts/verify_refactor.py before/ after/"
+
+  - title: "Verify Git commits with JSON output"
+    description: "Compare main branch to HEAD with machine-readable output"
+    command: "python scripts/verify_git_refactor.py origin/main HEAD --repo . --json"
+
+  - title: "Ignore specific violations"
+    description: "Allow comment changes but reject all other violations"
+    command: "python scripts/verify_refactor.py before/ after/ --ignore-rule comments"
+
+requirements:
+  python: ">=3.9"
+  dependencies:
+    - ast (stdlib)
+    - json (stdlib)
+    - pathlib (stdlib)
+    - subprocess (stdlib)

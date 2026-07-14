@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.13"
-# dependencies = []
+# dependencies = ["rich>=13.0.0"]
 # ///
 """
 Bidirectional sync for ~/.claude configuration files to/from git repo.
+
+SAFETY: Only overwrites files, never deletes anything. All files are preserved.
 
 Syncs:
 - keybindings.json
 - settings.json, settings.local.json
 - CLAUDE.md, AGENTS.md
+- hooks.json, launch.json
 - agents/ directory (custom agents)
 - rules/ directory (custom rules)
-- hooks.json, launch.json
+- skills/ directory (custom skills)
+- commands/ directory (custom commands)
 
 Usage:
   python claude-sync.py [status|push|pull|auto] [--backup] [--dry-run] [--force]
 
 Commands:
   status    - Show what would be synced
-  push      - Sync ~/.claude → repo (git tracked files)
-  pull      - Sync repo → ~/.claude
+  push      - Sync ~/.claude → repo (overwrite only)
+  pull      - Sync repo → ~/.claude (overwrite only)
   auto      - Auto-detect direction (latest modtime wins)
 
 Options:
@@ -37,6 +41,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.syntax import Syntax
+
+console = Console()
+
 # Configuration
 CLAUDE_HOME = Path.home() / ".claude"
 SYNC_CONFIG = {
@@ -49,7 +60,7 @@ SYNC_CONFIG = {
         "hooks.json",
         "launch.json",
     ],
-    "dirs": ["agents", "rules"],
+    "dirs": ["agents", "rules", "skills", "commands"],
 }
 
 # Auto-detect repo root (where this script lives)
@@ -73,7 +84,7 @@ def backup_file(path: Path) -> Optional[Path]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = path.with_stem(f"{path.stem}.backup_{timestamp}")
     shutil.copy2(path, backup)
-    print(f"  Backed up: {backup.name}")
+    console.print(f"  [dim]Backed up:[/] {backup.name}")
     return backup
 
 def get_mtime(path: Path) -> float:
@@ -85,19 +96,14 @@ def is_newer(src: Path, dst: Path) -> bool:
     return get_mtime(src) > get_mtime(dst)
 
 def sync_file(src: Path, dst: Path, backup: bool = False, direction: str = "->") -> bool:
-    """Sync single file. Return True if changed."""
+    """Sync single file (copy/overwrite only, no deletions). Return True if changed."""
     if not src.exists():
-        if dst.exists():
-            print(f"  Remove: {dst.relative_to(dst.parent.parent)}")
-            if not DRY_RUN:
-                if backup:
-                    backup_file(dst)
-                dst.unlink()
-            return True
+        # Source doesn't exist - skip (never delete destination)
         return False
 
     if not dst.exists() or is_newer(src, dst):
-        print(f"  Sync: {src.name} {direction} {dst.relative_to(dst.parent.parent)}")
+        dir_color = "yellow" if direction == "->" else "cyan"
+        console.print(f"  [green]Sync:[/] {src.name} [{dir_color}]{direction}[/] {dst.relative_to(dst.parent.parent)}")
         if not DRY_RUN:
             if dst.exists() and backup:
                 backup_file(dst)
@@ -108,7 +114,7 @@ def sync_file(src: Path, dst: Path, backup: bool = False, direction: str = "->")
     return False
 
 def sync_dir(src: Path, dst: Path, backup: bool = False, direction: str = "->") -> bool:
-    """Sync directory recursively. Return True if any changes."""
+    """Sync directory recursively (copy/overwrite only, no deletions). Return True if any changes."""
     changed = False
     if not src.exists():
         return False
@@ -116,7 +122,7 @@ def sync_dir(src: Path, dst: Path, backup: bool = False, direction: str = "->") 
     if not DRY_RUN:
         dst.mkdir(parents=True, exist_ok=True)
 
-    # Sync files in src → dst
+    # Sync files in src → dst (copy/overwrite only, never delete)
     for src_file in src.rglob("*"):
         if src_file.is_file():
             rel_path = src_file.relative_to(src)
@@ -124,55 +130,51 @@ def sync_dir(src: Path, dst: Path, backup: bool = False, direction: str = "->") 
             if sync_file(src_file, dst_file, backup, direction):
                 changed = True
 
-    # Remove files in dst that don't exist in src
-    for dst_file in list(dst.rglob("*")):
-        if dst_file.is_file():
-            rel_path = dst_file.relative_to(dst)
-            src_file = src / rel_path
-            if not src_file.exists():
-                print(f"  Remove: {dst_file.relative_to(SYNC_DIR.parent)}")
-                if not DRY_RUN:
-                    if backup:
-                        backup_file(dst_file)
-                    dst_file.unlink()
-                changed = True
-
     return changed
 
 def status() -> None:
     """Show sync status."""
     ensure_sync_dir()
-    print("\n📋 Claude Configuration Sync Status\n")
-    print(f"  ~/.claude:  {CLAUDE_HOME}")
-    print(f"  Git repo:   {SYNC_DIR}\n")
+    console.print("\n📋 [bold cyan]Claude Configuration Sync Status[/]\n")
+    console.print(f"  [dim]~/.claude:[/]  {CLAUDE_HOME}")
+    console.print(f"  [dim]Git repo:[/]   {SYNC_DIR}\n")
 
-    print("Files:")
+    # Files table
+    table = Table(title="Files", show_header=True, header_style="bold magenta")
+    table.add_column("File", style="cyan")
+    table.add_column("Status", justify="center")
+    table.add_column("Direction", style="yellow")
+
     for fname in SYNC_CONFIG["files"]:
         claude_file = CLAUDE_HOME / fname
         repo_file = SYNC_DIR / fname
-        status_str = "✓" if claude_file.exists() else "✗"
+        status_str = "✓ exists" if claude_file.exists() else "✗ missing"
+        status_color = "green" if claude_file.exists() else "red"
 
         mtime_diff = get_mtime(claude_file) - get_mtime(repo_file)
         if mtime_diff > 0:
-            direction = "→ (newer in ~/.claude)"
+            direction = "[yellow]→[/] (newer in ~/.claude)"
         elif mtime_diff < 0:
-            direction = "← (newer in repo)"
+            direction = "[cyan]←[/] (newer in repo)"
         else:
-            direction = "= (synced)"
+            direction = "[green]=[/] (synced)"
 
-        print(f"  {status_str} {fname:25} {direction}")
+        table.add_row(fname, f"[{status_color}]{status_str}[/]", direction)
 
-    print("\nDirectories:")
+    console.print(table)
+
+    # Directories
+    console.print("\n[bold magenta]Directories[/]")
     for dname in SYNC_CONFIG["dirs"]:
         claude_dir = CLAUDE_HOME / dname
-        status_str = "✓" if claude_dir.exists() else "✗"
-        print(f"  {status_str} {dname}/")
+        status_str = "[green]✓[/]" if claude_dir.exists() else "[red]✗[/]"
+        console.print(f"  {status_str} [cyan]{dname}/[/]")
 
 def push(backup: bool = False, force: bool = False) -> None:
     """Sync ~/.claude → repo."""
     ensure_sync_dir()
-    dry = "[DRY-RUN] " if DRY_RUN else ""
-    print(f"\n📤 {dry}Pushing ~/.claude → repo\n")
+    dry_tag = "[bold red][DRY-RUN][/][/] " if DRY_RUN else ""
+    console.print(f"\n{dry_tag}📤 [bold yellow]Pushing ~/.claude → repo[/]\n")
 
     changed = False
 
@@ -190,15 +192,15 @@ def push(backup: bool = False, force: bool = False) -> None:
 
     if changed:
         git_commit("Push: sync ~/.claude → repo")
-        print(f"\n✅ {dry}Push complete")
+        console.print(f"\n[bold green]✅ Push complete[/]")
     else:
-        print("\n✓ Already synced")
+        console.print("\n[bold cyan]✓ Already synced[/]")
 
 def pull(backup: bool = False, force: bool = False) -> None:
     """Sync repo → ~/.claude."""
     ensure_sync_dir()
-    dry = "[DRY-RUN] " if DRY_RUN else ""
-    print(f"\n📥 {dry}Pulling repo → ~/.claude\n")
+    dry_tag = "[bold red][DRY-RUN][/][/] " if DRY_RUN else ""
+    console.print(f"\n{dry_tag}📥 [bold cyan]Pulling repo → ~/.claude[/]\n")
 
     changed = False
 
@@ -215,16 +217,17 @@ def pull(backup: bool = False, force: bool = False) -> None:
             changed = True
 
     if changed:
-        msg = "Restart Claude Code for changes to take effect." if not DRY_RUN else ""
-        print(f"\n✅ {dry}Pull complete. {msg}")
+        console.print(f"\n[bold green]✅ Pull complete[/]")
+        if not DRY_RUN:
+            console.print("[dim]Restart Claude Code for changes to take effect.[/]")
     else:
-        print("\n✓ Already synced")
+        console.print("\n[bold cyan]✓ Already synced[/]")
 
 def auto_sync(backup: bool = False, force: bool = False) -> None:
     """Auto-detect direction based on modification times."""
     ensure_sync_dir()
-    dry = "[DRY-RUN] " if DRY_RUN else ""
-    print(f"\n🔄 {dry}Auto-syncing (latest modtime wins)\n")
+    dry_tag = "[bold red][DRY-RUN][/][/] " if DRY_RUN else ""
+    console.print(f"\n{dry_tag}🔄 [bold magenta]Auto-syncing (latest modtime wins)[/]\n")
 
     # Check which direction has newer files
     claude_newer = False
@@ -260,22 +263,22 @@ def auto_sync(backup: bool = False, force: bool = False) -> None:
                         break
 
     if claude_newer and not repo_newer:
-        print("→ Detected changes in ~/.claude, pushing...\n")
+        console.print("[yellow]→[/] Detected changes in ~/.claude, pushing...\n")
         push(backup)
     elif repo_newer and not claude_newer:
-        print("← Detected changes in repo, pulling...\n")
+        console.print("[cyan]←[/] Detected changes in repo, pulling...\n")
         pull(backup)
     elif claude_newer and repo_newer:
         if force:
-            print("⚠️  Conflict: both sides have newer files")
-            print("   --force used, pushing ~/.claude...\n")
+            console.print("[bold yellow]⚠️  Conflict:[/] both sides have newer files")
+            console.print("[bold yellow]--force[/] used, pushing ~/.claude...\n")
             push(backup)
         else:
-            print("⚠️  Conflict: both sides have newer files")
-            print("   Run with --force to push, or manually resolve")
+            console.print("\n[bold red]⚠️  Conflict:[/] both sides have newer files")
+            console.print("[yellow]Run with[/] [bold cyan]--force[/] [yellow]to push, or manually resolve[/]")
             sys.exit(1)
     else:
-        print("✓ Both sides already synced")
+        console.print("[bold green]✓[/] Both sides already synced")
 
 def git_commit(message: str) -> bool:
     """Commit changes to git."""
@@ -291,7 +294,7 @@ def git_commit(message: str) -> bool:
             return False
 
         if DRY_RUN:
-            print(f"\n  [DRY-RUN] Would commit: {message}")
+            console.print(f"\n  [bold red][DRY-RUN][/] Would commit: {message}")
             return True
 
         subprocess.run(
@@ -306,13 +309,13 @@ def git_commit(message: str) -> bool:
             capture_output=True,
             timeout=5,
         )
-        print(f"\n  Committed: {message}")
+        console.print(f"\n  [dim]Committed:[/] {message}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"  ⚠️  Git commit failed: {e}")
+        console.print(f"  [bold red]✗ Git commit failed:[/] {e}")
         return False
     except Exception as e:
-        print(f"  ⚠️  Git error: {e}")
+        console.print(f"  [bold red]✗ Git error:[/] {e}")
         return False
 
 def main():
@@ -359,10 +362,10 @@ def main():
         elif args.command == "auto":
             auto_sync(backup=args.backup, force=args.force)
     except KeyboardInterrupt:
-        print("\n\nCancelled")
+        console.print("\n\n[bold red]Cancelled[/]")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        console.print(f"\n[bold red]❌ Error:[/] {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
